@@ -25,8 +25,6 @@ namespace act_plugin_dkp
     public class AphaLootTracker : UserControl, IActPluginV1
     {
         private HttpClient httpClient;
-        private HttpClientHandler httpHandler;
-        private CookieContainer cookieContainer;
         bool cookiesInitialized = false;
         private bool refreshLvItems = false;
         private int lvChatSorting = 0;
@@ -46,8 +44,6 @@ namespace act_plugin_dkp
 
         private void InitializeComponent()
         {
-            this.cookieContainer = new CookieContainer();
-            this.httpHandler = new HttpClientHandler() {CookieContainer = this.cookieContainer};
             this.httpClient = new HttpClient();
             this.components = new System.ComponentModel.Container();
             this.ItemsListViewContextMenuStrip = new System.Windows.Forms.ContextMenuStrip(this.components);
