@@ -1,15 +1,21 @@
 ﻿// reference:System.dll
 // reference:System.Net.Http.dll
 
-using Advanced_Combat_Tracker;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.IO;
+using System.Reflection;
+using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
+using System.Threading;
+using System.Xml;
+using Advanced_Combat_Tracker;
+
 
 namespace act_plugin_dkp
 {
@@ -18,7 +24,10 @@ namespace act_plugin_dkp
     /// </summary>
     public class AphaLootTracker : UserControl, IActPluginV1
     {
-        private HttpClient client;
+        private HttpClient httpClient;
+        private HttpClientHandler httpHandler;
+        private CookieContainer cookieContainer;
+        bool cookiesInitialized = false;
         private bool refreshLvItems = false;
         private int lvChatSorting = 0;
         private bool lvChatReverse = true;
@@ -37,7 +46,9 @@ namespace act_plugin_dkp
 
         private void InitializeComponent()
         {
-            this.client = new HttpClient();
+            this.cookieContainer = new CookieContainer();
+            this.httpHandler = new HttpClientHandler() {CookieContainer = this.cookieContainer};
+            this.httpClient = new HttpClient();
             this.components = new System.ComponentModel.Container();
             this.ItemsListViewContextMenuStrip = new System.Windows.Forms.ContextMenuStrip(this.components);
             this.copyItemLinkToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
@@ -88,6 +99,13 @@ namespace act_plugin_dkp
             this.numberOfSecondsToRecordChatPrecedingItemLabel = new System.Windows.Forms.Label();
             this.numberOfChatLinesSelector = new System.Windows.Forms.NumericUpDown();
             this.numberOfChatSecondsSelector = new System.Windows.Forms.NumericUpDown();
+            this.labeldkpSiteURL = new System.Windows.Forms.Label();
+            this.labeldkpSiteUser = new System.Windows.Forms.Label();
+            this.labeldkpSitePwd = new System.Windows.Forms.Label();
+            this.dkpSiteURL = new System.Windows.Forms.TextBox();
+            this.dkpSiteUser = new System.Windows.Forms.TextBox();
+            this.dkpSitePwd = new System.Windows.Forms.TextBox();
+            this.dkpDebugText = new System.Windows.Forms.TextBox();
             this.chatLinesCheckBox = new System.Windows.Forms.CheckBox();
             this.chatSecondsCheckBox = new System.Windows.Forms.CheckBox();
             this.HalfSecondTimer = new System.Windows.Forms.Timer(this.components);
@@ -393,9 +411,16 @@ namespace act_plugin_dkp
             // otherSettingsGroupBox
             // 
             this.otherSettingsGroupBox.Controls.Add(this.skipLottoCheckBox);
+            this.otherSettingsGroupBox.Controls.Add(this.labeldkpSiteURL);
+            this.otherSettingsGroupBox.Controls.Add(this.labeldkpSiteUser);
+            this.otherSettingsGroupBox.Controls.Add(this.labeldkpSitePwd);
+            this.otherSettingsGroupBox.Controls.Add(this.dkpSiteURL);
+            this.otherSettingsGroupBox.Controls.Add(this.dkpSiteUser);
+            this.otherSettingsGroupBox.Controls.Add(this.dkpSitePwd);
+            this.otherSettingsGroupBox.Controls.Add(this.dkpDebugText);
             this.otherSettingsGroupBox.Location = new System.Drawing.Point(7, 375);
             this.otherSettingsGroupBox.Name = "otherSettingsGroupBox";
-            this.otherSettingsGroupBox.Size = new System.Drawing.Size(704, 88);
+            this.otherSettingsGroupBox.Size = new System.Drawing.Size(704, 300);
             this.otherSettingsGroupBox.TabIndex = 4;
             this.otherSettingsGroupBox.TabStop = false;
             this.otherSettingsGroupBox.Text = "Other Settings";
@@ -404,12 +429,68 @@ namespace act_plugin_dkp
             // 
             this.skipLottoCheckBox.AutoSize = true;
             this.skipLottoCheckBox.Checked = true;
+            this.skipLottoCheckBox.CheckState = CheckState.Checked;
             this.skipLottoCheckBox.Location = new System.Drawing.Point(7, 20);
             this.skipLottoCheckBox.Name = "skipLottoCheckBox";
             this.skipLottoCheckBox.Size = new System.Drawing.Size(80, 17);
             this.skipLottoCheckBox.TabIndex = 0;
             this.skipLottoCheckBox.Text = "Skip Lotto?";
             this.skipLottoCheckBox.UseVisualStyleBackColor = true;
+            // labels
+            this.labeldkpSiteURL.AutoSize = true;
+            this.labeldkpSiteURL.Location = new System.Drawing.Point(7, 50);
+            this.labeldkpSiteURL.Name = "labeldkpSiteURL";
+            this.labeldkpSiteURL.Size = new System.Drawing.Size(120, 20);
+            this.labeldkpSiteURL.TabIndex = 1;
+            this.labeldkpSiteURL.Text = "DKP Site URL";
+            this.labeldkpSiteUser.AutoSize = true;
+            this.labeldkpSiteUser.Location = new System.Drawing.Point(7, 80);
+            this.labeldkpSiteUser.Name = "labeldkpSiteUser";
+            this.labeldkpSiteUser.Size = new System.Drawing.Size(120, 20);
+            this.labeldkpSiteUser.TabIndex = 1;
+            this.labeldkpSiteUser.Text = "DKP Site Username";
+            this.labeldkpSitePwd.AutoSize = true;
+            this.labeldkpSitePwd.Location = new System.Drawing.Point(7, 110);
+            this.labeldkpSitePwd.Name = "labeldkpSitePwd";
+            this.labeldkpSitePwd.Size = new System.Drawing.Size(120, 20);
+            this.labeldkpSitePwd.TabIndex = 1;
+            this.labeldkpSitePwd.Text = "DKP Site Password";
+            // 
+            // dkpSiteURL
+            // 
+            this.dkpSiteURL.Location = new System.Drawing.Point(137, 50);
+            this.dkpSiteURL.Name = "dkpSiteURL";
+            this.dkpSiteURL.Size = new System.Drawing.Size(400, 20);
+            this.dkpSiteURL.TabIndex = 2;
+            this.dkpSiteURL.Text = "https://www.aphadrim.com/proc/raid_anwesenheit_tool_neu.php";
+            // 
+            // dkpSiteUser
+            // 
+            this.dkpSiteUser.Location = new System.Drawing.Point(137, 80);
+            this.dkpSiteUser.Name = "dkpSiteUser";
+            this.dkpSiteUser.Size = new System.Drawing.Size(200, 20);
+            this.dkpSiteUser.TabIndex = 2;
+            this.dkpSiteUser.Text = "";
+            // 
+            // dkpSitePwd
+            // 
+            this.dkpSitePwd.Location = new System.Drawing.Point(137, 110);
+            this.dkpSitePwd.Name = "dkpSitePwd";
+            this.dkpSitePwd.Size = new System.Drawing.Size(200, 20);
+            this.dkpSitePwd.TabIndex = 2;
+            this.dkpSitePwd.Text = "";
+            // 
+            // dkpDebugText
+            // 
+            this.dkpDebugText.Location = new System.Drawing.Point(7, 140);
+            this.dkpDebugText.Name = "dkpDebugText";
+            this.dkpDebugText.Size = new System.Drawing.Size(400, 150);
+            this.dkpDebugText.TabIndex = 2;
+            this.dkpDebugText.Text = "";
+            this.dkpDebugText.Multiline = true;
+            this.dkpDebugText.AcceptsReturn = true;
+            this.dkpDebugText.ScrollBars = ScrollBars.Vertical;
+            this.dkpDebugText.ReadOnly = true;
             // 
             // groupBox4
             // 
@@ -713,6 +794,13 @@ namespace act_plugin_dkp
         private DataGridViewTextBoxColumn columnDKPSubmitResult;
         private GroupBox otherSettingsGroupBox;
         private CheckBox skipLottoCheckBox;
+        private Label labeldkpSiteURL;
+        private Label labeldkpSiteUser;
+        private Label labeldkpSitePwd;
+        private TextBox dkpSiteURL;
+        private TextBox dkpSiteUser;
+        private TextBox dkpSitePwd;
+        private TextBox dkpDebugText;
         private ToolStripMenuItem copyTallyAsPlainTextToolStripMenuItem;
         private System.Windows.Forms.ColumnHeader chatTextColumnHeader;
 
@@ -729,8 +817,11 @@ namespace act_plugin_dkp
         private string persona;
         private List<LootedItemData> lootedItems = new List<LootedItemData>();
         private Dictionary<string, List<ChatLine>> chatCollections = new Dictionary<string, List<ChatLine>>();
-        private int lastParsedDKP = 0;
+        private int highestDKPsinceLastLoot = 0;
         public Label lblPluginStatus;
+
+        /// <summary>Settings serializer, for storing plugin settings.</summary>
+        private SettingsSerializer xmlSettings;
 
         /// <summary>Regular Expression for an item.</summary>
         private static Regex regexItem = new Regex(@"\\aITEM (?<itemid>-?\d+) [-\d ]+:(?<itemname>[^\\]+)\\/a", RegexOptions.Compiled);
@@ -759,18 +850,79 @@ namespace act_plugin_dkp
         /// <summary>Regular Expression for chat text - German.</summary>
         private Regex regexChatGer = new Regex(logTimeStampRegexStr + @"(?:(?<speaker>" + germanYou + @")|\\aPC -?\d+ (?<speaker>\w+):\w+\\.a) (?<channel>.+?), ?""(?<text>.+)""", RegexOptions.Compiled);
 
+        private Regex regexBid = new Regex(@"[^\d]*(?<bid>[\d,.]+)(?<platbid>[kK]+)?[^\d]*", RegexOptions.Compiled);
+
         public void InitPlugin(TabPage pluginScreenSpace, Label pluginStatusText)
         {
             this.lblPluginStatus = pluginStatusText;
             this.SetParseLang(0);
+            this.xmlSettings = new SettingsSerializer(this);
+            this.LoadSettings();
             pluginScreenSpace.Controls.Add(this);
             this.Dock = DockStyle.Fill;
             ActGlobals.oFormActMain.OnLogLineRead += new LogLineEventDelegate(this.oFormActMain_OnLogLineRead);
         }
 
+        /// <summary>
+        /// Loads Settings from configuration.
+        /// </summary>
+        private void LoadSettings()
+        {
+            this.xmlSettings.AddControlSetting(this.chatLinesCheckBox.Name, this.chatLinesCheckBox);
+            this.xmlSettings.AddControlSetting(this.chatSecondsCheckBox.Name, this.chatSecondsCheckBox);
+            this.xmlSettings.AddControlSetting(this.numberOfChatLinesSelector.Name, this.numberOfChatLinesSelector);
+            this.xmlSettings.AddControlSetting(this.numberOfChatSecondsSelector.Name, this.numberOfChatSecondsSelector);
+            this.xmlSettings.AddControlSetting(this.lbNamedChat.Name, this.lbNamedChat);
+            this.xmlSettings.AddControlSetting(this.ChatPanel.Name, this.ChatPanel);
+            this.xmlSettings.AddControlSetting(this.EnglishRadioButton.Name, this.EnglishRadioButton);
+            this.xmlSettings.AddControlSetting(this.GermanRadioButton.Name, this.GermanRadioButton);
+            this.xmlSettings.AddControlSetting(this.skipLottoCheckBox.Name, this.skipLottoCheckBox);
+            this.xmlSettings.AddControlSetting(this.dkpSiteURL.Name, this.dkpSiteURL);
+            this.xmlSettings.AddControlSetting(this.dkpSiteUser.Name, this.dkpSiteUser);
+            this.xmlSettings.AddControlSetting(this.dkpSitePwd.Name, this.dkpSitePwd);
+            DirectoryInfo appDataFolder = new DirectoryInfo(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "\\Advanced Combat Tracker");
+            FileInfo configFile = new FileInfo(appDataFolder.FullName + "\\Config\\LootParsing.config.xml");
+            if (configFile.Exists)
+            {
+                FileStream fs = new FileStream(configFile.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                XmlTextReader xmlReader = new XmlTextReader(fs);
+                while (xmlReader.Read())
+                {
+                    if (xmlReader.NodeType == XmlNodeType.Element && xmlReader.Name == "Config")
+                    {
+                        break;
+                    }
+                }
+                this.xmlSettings.ImportFromXml(xmlReader);
+                xmlReader.Close();
+            }
+        }
+
         public void DeInitPlugin()
         {
             ActGlobals.oFormActMain.OnLogLineRead -= this.oFormActMain_OnLogLineRead;
+            this.SaveSettings();
+        }
+
+        /// <summary>
+        /// Saves settings to configuration file.
+        /// </summary>
+        private void SaveSettings()
+        {
+            DirectoryInfo configFolder = new DirectoryInfo(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "\\Advanced Combat Tracker");
+            FileInfo configFile = new FileInfo(configFolder.FullName + "\\Config\\LootParsing.config.xml");
+            FileStream fs = new FileStream(configFile.FullName, FileMode.Create, FileAccess.Write, FileShare.ReadWrite);
+            XmlTextWriter xmlWriter = new XmlTextWriter(fs, Encoding.UTF8);
+            xmlWriter.Formatting = Formatting.Indented;
+            xmlWriter.Indentation = 1;
+            xmlWriter.IndentChar = '\t';
+            xmlWriter.WriteStartDocument(true);
+            xmlWriter.WriteStartElement("Config");
+            this.xmlSettings.ExportToXml(xmlWriter);
+            xmlWriter.WriteEndElement();
+            xmlWriter.WriteEndDocument();
+            xmlWriter.Flush();
+            xmlWriter.Close();
         }
 
         public void SetParseLang(int language)
@@ -798,33 +950,33 @@ namespace act_plugin_dkp
 
         void guessDKP(string chatline)
         {
-            string line = chatline.Trim().ToLower();
-            bool possiblePlat = false;
-            if (line.Contains("alt"))
-            {
-                line = line.Replace("alt", "").Trim();
-            }
-            if (line.EndsWith("k"))
-            {
-                line = line.Remove(line.Length - 1, 1).Trim();
-                possiblePlat = true;
-            }
-            line = line.Replace(",", ".");
-            int dkp = 0;
-            if (int.TryParse(line, out dkp))
-            {
-                if (dkp >= 20 && possiblePlat)
-                {
-                    dkp = 0;
-                }
-            }
-            else
-            {
+            var multiplier = 1;
+            var match = this.regexBid.Match(chatline);
+            if (!match.Success) {
                 return;
             }
-            if (dkp > this.lastParsedDKP)
-            {
-                this.lastParsedDKP = dkp;
+            this.dkpDebugText.Text += "new bid: " + chatline + Environment.NewLine;
+            if (match.Groups["platbid"].Success) {
+                if (match.Groups["platbid"].Value.Trim().ToLower() == "k") {
+                    multiplier = 1000;
+                } else if (match.Groups["platbid"].Value.Trim().ToLower() == "kk") {
+                    multiplier = 1000000;
+                }
+            }
+            string sdkp = match.Groups["bid"].Value.Trim().ToLower().Replace(",", ".");
+            float fdkpraw = float.Parse(sdkp);
+            float fdkp = fdkpraw * multiplier;
+            if (fdkp >= 20000.0) {
+                // non-dkp bid
+                return;
+            } else if (fdkp < 20.0) {
+                // probably missing multiplier
+                fdkp = fdkp * 1000;
+            }
+            int dkp = (int) fdkp;
+            if (dkp > this.highestDKPsinceLastLoot) {
+                this.highestDKPsinceLastLoot = dkp;
+                this.dkpDebugText.Text += "highest bid: " + this.highestDKPsinceLastLoot + Environment.NewLine;
             }
         }
 
@@ -878,12 +1030,14 @@ namespace act_plugin_dkp
                     container = match.Groups["container"].Value + " (lotto)";
                     lottoWin = true;
                 }
-
                 if (skipLottoCheckBox.Checked && lottoWin)
                 {
                     return;
                 }
-
+                if (container.Contains("corpse"))
+                {
+                    return;
+                }
                 string looter = match.Groups["looter"].Value == this.persona ? ActGlobals.charName : match.Groups["looter"].Value;
                 LootedItemData item = new LootedItemData(logInfo.detectedTime, looter, match.Groups["itemname"].Value, match.Groups["itemid"].Value, container, logInfo.detectedZone, logInfo.logLine);
 
@@ -905,7 +1059,6 @@ namespace act_plugin_dkp
                         }
                     }
                 }
-
                 if (this.chatSecondsCheckBox.Checked)
                 {
                     int timeLimit = (int)this.numberOfChatSecondsSelector.Value;
@@ -925,7 +1078,6 @@ namespace act_plugin_dkp
                         }
                     }
                 }
-
                 item.Chat.Sort();
                 for (int i = item.Chat.Count - 1; i > 0; i--)
                 {
@@ -934,10 +1086,8 @@ namespace act_plugin_dkp
                         item.Chat.RemoveAt(i);
                     }
                 }
-
-                item.DKP = this.lastParsedDKP.ToString();
-                this.lastParsedDKP = 0;
-
+                item.DKP = this.highestDKPsinceLastLoot.ToString();
+                this.highestDKPsinceLastLoot = 0;
                 this.lootedItems.Add(item);
                 this.refreshLvItems = true;
             }
@@ -1060,18 +1210,68 @@ namespace act_plugin_dkp
             List<DataGridViewRow> selectedDataGridRows = GetSelectedItemRows();
             foreach (DataGridViewRow row in selectedDataGridRows)
             {
-                LootedItemData item = (LootedItemData)row.Tag;
-                if (item.DKPSubmitResult.StartsWith("200"))
-                {
+                LootedItemData item = (LootedItemData) row.Tag;
+                if (item.DKPSubmitResult.StartsWith("200")) {
                     continue;
                 }
-                // TODO
-                var values = new Dictionary<string, string> {{ "thing1", "hello" },{ "thing2", "world" }};
-                var content = new FormUrlEncodedContent(values);
-                var response = this.client.PostAsync("http://www.google.com/", content);
-                var code = (int) response.Result.StatusCode;
-                var status = response.Result.StatusCode.ToString();
-                item.DKPSubmitResult = code + " " + status + " (" + response.Result.ReasonPhrase + ")";
+                if (this.dkpSiteURL.Text == "")
+                    throw new System.ArgumentException("Missing URL for DKP Website", "empty URL");
+                if (!this.cookiesInitialized) {
+                    if (this.dkpSiteUser.Text == "")
+                        throw new System.ArgumentException("Missing URL for DKP Website", "empty username");
+                    if (this.dkpSitePwd.Text == "")
+                        throw new System.ArgumentException("Missing URL for DKP Website", "empty password");
+                    var websiteURI = new Uri(this.dkpSiteURL.Text);
+                    var baseUri = new Uri(websiteURI.GetLeftPart(System.UriPartial.Authority));
+                    this.httpClient.BaseAddress = baseUri;
+                    var login_values = new Dictionary<string, string> {
+                        { "username", this.dkpSiteUser.Text },
+                        { "password", this.dkpSitePwd.Text },
+                        { "formular", "0" },
+                        { "formular2", "0" },
+                        { "formular_eb", "0" },
+                        { "formular_rz", "0" },
+                        { "formular_auth", "1" },
+                        { "formular_boss", "0" },
+                        { "formular_dkp", "0" },
+                        { "formular_loot", "0" },
+                        { "formular_progr", "0" },
+                        { "login", "Anmelden" }
+                        };
+                    var login_content = new FormUrlEncodedContent(login_values);
+                    var login_response = this.httpClient.PostAsync(this.dkpSiteURL.Text, login_content);
+                    login_response.Wait();
+                    var login_code = (int) login_response.Result.StatusCode;
+                    var login_result_str = login_code + " " + login_response.Result.StatusCode.ToString() + " (" + login_response.Result.ReasonPhrase + ")";
+                    this.dkpDebugText.Text += "Login result: " + login_result_str + Environment.NewLine;
+                    // TODO not sure if there is session timeout, so lets login each time for now
+                    //this.cookiesInitialized = true;
+                }
+                byte[] encodedBytes = System.Text.ASCIIEncoding.ASCII.GetBytes(item.ItemLink);
+                var ItemNameBase64 = Convert.ToBase64String(encodedBytes);
+                var loot_values = new Dictionary<string, string> {
+                    { "dkp_loot_name", item.ItemLink },
+                    { "dkp_loot_name_base64", ItemNameBase64 },
+                    { "name_user_loot", item.Player },
+                    { "dkp_loot_wert", item.DKP },
+                    { "loot_index", "0" },
+                    { "formular2", "0" },
+                    { "formular", "0" },
+                    { "formular_eb", "0" },
+                    { "formular_rz", "0" },
+                    { "formular_boss", "0" },
+                    { "formular_dkp", "0" },
+                    { "formular_loot", "1" },
+                    { "formular_progr", "0" },
+                    { "dkp_loot_submit", "Loot/DKP-Eintragen" }
+                    };
+                var loot_content = new FormUrlEncodedContent(loot_values);
+                var loot_response = this.httpClient.PostAsync(this.dkpSiteURL.Text, loot_content);
+                loot_response.Wait();
+                var loot_code = (int) loot_response.Result.StatusCode;
+                var loot_result_str = loot_code + " " + loot_response.Result.StatusCode.ToString() + " (" + loot_response.Result.ReasonPhrase + ")";
+                item.DKPSubmitResult = loot_result_str;
+                this.dkpDebugText.Text += "Loot submit result for [" + item.ItemName + "]: " + loot_result_str + Environment.NewLine;
             }
             this.RepopulateItemDataGridview();
             this.RepopulateChatListView();
@@ -1261,6 +1461,8 @@ namespace act_plugin_dkp
                 this.Zone = Zone;
                 this.Chat = new List<ChatLine>();
                 this.LogLine = LogLine;
+                if (!ItemName.StartsWith("["))
+                    LogLine = LogLine.Replace(ItemName, "[" + ItemName + "]");
                 this.ItemLink = regexItem.Match(LogLine).Value;
                 this.DKP = "0";
                 this.DKPSubmitResult = "-";
