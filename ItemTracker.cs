@@ -44,7 +44,6 @@ namespace act_plugin_dkp
 
         private void InitializeComponent()
         {
-            this.httpClient = new HttpClient();
             this.components = new System.ComponentModel.Container();
             this.ItemsListViewContextMenuStrip = new System.Windows.Forms.ContextMenuStrip(this.components);
             this.copyItemLinkToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
@@ -352,8 +351,7 @@ namespace act_plugin_dkp
             // wasSubmitted
             // 
             this.columnDKPSubmitResult.HeaderText = "Submit Result";
-            this.columnDKPSubmitResult.Name = "Submit Result";
-            this.columnContainer.ReadOnly = true;
+            this.columnDKPSubmitResult.Name = "columnResult";
             // 
             // tabs
             // 
@@ -651,7 +649,7 @@ namespace act_plugin_dkp
             this.numberOfChatLinesSelector.Name = "numberOfChatLinesSelector";
             this.numberOfChatLinesSelector.Size = new System.Drawing.Size(55, 20);
             this.numberOfChatLinesSelector.TabIndex = 1;
-            this.numberOfChatLinesSelector.Value = new decimal(new int[] { 10, 0, 0, 0 });
+            this.numberOfChatLinesSelector.Value = new decimal(new int[] { 15, 0, 0, 0 });
             // 
             // numberOfChatSecondsSelector
             // 
@@ -1151,17 +1149,21 @@ namespace act_plugin_dkp
         {
             if (this.itemGridView.SelectedCells.Count > 0)
             {
-                string headerText = this.itemGridView.Columns[e.ColumnIndex].HeaderText;
+                string columnName = this.itemGridView.Columns[e.ColumnIndex].Name;
                 DataGridViewRow lvi = this.itemGridView.SelectedCells[0].OwningRow;
                 LootedItemData item = (LootedItemData)lvi.Tag;
-                if (headerText == "DKP")
+                if (columnName == "columnDKP")
                 {
                     int dkp = int.Parse(e.FormattedValue.ToString());
                     item.DKP = dkp.ToString();
                 }
-                else if (headerText == "Player")
+                else if (columnName == "columnPlayer")
                 {
                     item.Player = e.FormattedValue.ToString();
+                }
+                else if (columnName == "columnResult")
+                {
+                    item.DKPSubmitResult = e.FormattedValue.ToString();
                 }
             }
         }
@@ -1203,46 +1205,46 @@ namespace act_plugin_dkp
 
         private void submitToDKPSite_Click(object sender, EventArgs e)
         {
+            if (this.dkpSiteURL.Text == "")
+                throw new System.ArgumentException("Missing URL for DKP Website", "empty URL");
+            if (!this.cookiesInitialized) {
+                if (this.dkpSiteUser.Text == "")
+                    throw new System.ArgumentException("Missing username for DKP Website", "empty username");
+                if (this.dkpSitePwd.Text == "")
+                    throw new System.ArgumentException("Missing password for DKP Website", "empty password");
+                if (this.httpClient != null)
+                    this.httpClient.Dispose();
+                this.httpClient = new HttpClient();
+                var websiteURI = new Uri(this.dkpSiteURL.Text);
+                var baseUri = new Uri(websiteURI.GetLeftPart(System.UriPartial.Authority));
+                this.httpClient.BaseAddress = baseUri;
+                var login_values = new Dictionary<string, string> {
+                    { "username", this.dkpSiteUser.Text },
+                    { "password", this.dkpSitePwd.Text },
+                    { "formular", "0" },
+                    { "formular2", "0" },
+                    { "formular_eb", "0" },
+                    { "formular_rz", "0" },
+                    { "formular_auth", "1" },
+                    { "formular_boss", "0" },
+                    { "formular_dkp", "0" },
+                    { "formular_loot", "0" },
+                    { "formular_progr", "0" },
+                    { "login", "Anmelden" }
+                    };
+                var login_content = new FormUrlEncodedContent(login_values);
+                var login_response = this.httpClient.PostAsync(this.dkpSiteURL.Text, login_content);
+                login_response.Wait();
+                var login_code = (int) login_response.Result.StatusCode;
+                var login_result_str = login_code + " " + login_response.Result.StatusCode.ToString() + " (" + login_response.Result.ReasonPhrase + ")";
+                this.dkpDebugText.Text += "Login result: " + login_result_str + Environment.NewLine;
+                // TODO not sure if there is session timeout, so lets login each time for now
+                //this.cookiesInitialized = true;
+            }
             List<DataGridViewRow> selectedDataGridRows = GetSelectedItemRows();
             foreach (DataGridViewRow row in selectedDataGridRows)
             {
                 LootedItemData item = (LootedItemData) row.Tag;
-                if (item.DKPSubmitResult.StartsWith("200")) {
-                    continue;
-                }
-                if (this.dkpSiteURL.Text == "")
-                    throw new System.ArgumentException("Missing URL for DKP Website", "empty URL");
-                if (!this.cookiesInitialized) {
-                    if (this.dkpSiteUser.Text == "")
-                        throw new System.ArgumentException("Missing URL for DKP Website", "empty username");
-                    if (this.dkpSitePwd.Text == "")
-                        throw new System.ArgumentException("Missing URL for DKP Website", "empty password");
-                    var websiteURI = new Uri(this.dkpSiteURL.Text);
-                    var baseUri = new Uri(websiteURI.GetLeftPart(System.UriPartial.Authority));
-                    this.httpClient.BaseAddress = baseUri;
-                    var login_values = new Dictionary<string, string> {
-                        { "username", this.dkpSiteUser.Text },
-                        { "password", this.dkpSitePwd.Text },
-                        { "formular", "0" },
-                        { "formular2", "0" },
-                        { "formular_eb", "0" },
-                        { "formular_rz", "0" },
-                        { "formular_auth", "1" },
-                        { "formular_boss", "0" },
-                        { "formular_dkp", "0" },
-                        { "formular_loot", "0" },
-                        { "formular_progr", "0" },
-                        { "login", "Anmelden" }
-                        };
-                    var login_content = new FormUrlEncodedContent(login_values);
-                    var login_response = this.httpClient.PostAsync(this.dkpSiteURL.Text, login_content);
-                    login_response.Wait();
-                    var login_code = (int) login_response.Result.StatusCode;
-                    var login_result_str = login_code + " " + login_response.Result.StatusCode.ToString() + " (" + login_response.Result.ReasonPhrase + ")";
-                    this.dkpDebugText.Text += "Login result: " + login_result_str + Environment.NewLine;
-                    // TODO not sure if there is session timeout, so lets login each time for now
-                    //this.cookiesInitialized = true;
-                }
                 byte[] encodedBytes = System.Text.ASCIIEncoding.ASCII.GetBytes(item.ItemLink);
                 var ItemNameBase64 = Convert.ToBase64String(encodedBytes);
                 var loot_values = new Dictionary<string, string> {
@@ -1266,8 +1268,8 @@ namespace act_plugin_dkp
                 loot_response.Wait();
                 var loot_code = (int) loot_response.Result.StatusCode;
                 var loot_result_str = loot_code + " " + loot_response.Result.StatusCode.ToString() + " (" + loot_response.Result.ReasonPhrase + ")";
-                item.DKPSubmitResult = loot_result_str;
                 this.dkpDebugText.Text += "Loot submit result for [" + item.ItemName + "]: " + loot_result_str + Environment.NewLine;
+                item.DKPSubmitResult = loot_response.Result.ReasonPhrase + " at " + DateTime.Now;
             }
             this.RepopulateItemDataGridview();
             this.RepopulateChatListView();
