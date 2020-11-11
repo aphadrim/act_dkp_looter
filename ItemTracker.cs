@@ -810,7 +810,6 @@ namespace act_plugin_dkp
         private string persona;
         private List<LootedItemData> lootedItems = new List<LootedItemData>();
         private Dictionary<string, List<ChatLine>> chatCollections = new Dictionary<string, List<ChatLine>>();
-        // TODO remove private int highestDKPsinceLastLoot = 0;
         public Label lblPluginStatus;
 
         /// <summary>Settings serializer, for storing plugin settings.</summary>
@@ -972,7 +971,6 @@ namespace act_plugin_dkp
                         }
                         var chatline = new ChatLine(logInfo.detectedTime, logInfo.logLine, channel, speaker, text);
                         this.chatCollections[s.ToUpper()].Add(chatline);
-                        // TODO remove this.guessDKP(text);
                         break;
                     }
                 }
@@ -1048,8 +1046,7 @@ namespace act_plugin_dkp
                     }
                 }
                 item.guessDKP();
-                // TODO remove item.DKP = this.highestDKPsinceLastLoot.ToString();
-                // TODO remove this.highestDKPsinceLastLoot = 0;
+                this.dkpDebugText.Text += "Auction: " + item.ItemName + " for " + item.DKP + Environment.NewLine;
                 this.lootedItems.Add(item);
                 this.refreshLvItems = true;
             }
@@ -1467,7 +1464,6 @@ namespace act_plugin_dkp
                 if (!match.Success) {
                     return;
                 }
-                // this.dkpDebugText.Text += "new bid: " + bidtext + Environment.NewLine;
                 if (match.Groups["platbid"].Success) {
                     if (match.Groups["platbid"].Value.Trim().ToLower() == "k") {
                         multiplier = 1000;
@@ -1486,10 +1482,6 @@ namespace act_plugin_dkp
                     fdkp = fdkp * 1000;
                 }
                 int dkp = (int) fdkp;
-                // if (dkp > this.highestDKPsinceLastLoot) {
-                    // this.highestDKPsinceLastLoot = dkp;
-                    // this.dkpDebugText.Text += "highest bid: " + this.highestDKPsinceLastLoot + Environment.NewLine;
-                // }
                 this.DKP = dkp.ToString();
             }
 
