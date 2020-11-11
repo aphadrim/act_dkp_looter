@@ -649,7 +649,7 @@ namespace act_plugin_dkp
             this.numberOfChatLinesSelector.Name = "numberOfChatLinesSelector";
             this.numberOfChatLinesSelector.Size = new System.Drawing.Size(55, 20);
             this.numberOfChatLinesSelector.TabIndex = 1;
-            this.numberOfChatLinesSelector.Value = new decimal(new int[] { 15, 0, 0, 0 });
+            this.numberOfChatLinesSelector.Value = new decimal(new int[] { 20, 0, 0, 0 });
             // 
             // numberOfChatSecondsSelector
             // 
@@ -684,7 +684,6 @@ namespace act_plugin_dkp
             this.chatSecondsCheckBox.TabIndex = 0;
             this.chatSecondsCheckBox.Text = "Keep chat by time";
             this.chatSecondsCheckBox.UseVisualStyleBackColor = true;
-            this.chatSecondsCheckBox.Checked = false;
             // 
             // HalfSecondTimer
             // 
@@ -811,7 +810,7 @@ namespace act_plugin_dkp
         private string persona;
         private List<LootedItemData> lootedItems = new List<LootedItemData>();
         private Dictionary<string, List<ChatLine>> chatCollections = new Dictionary<string, List<ChatLine>>();
-        private int highestDKPsinceLastLoot = 0;
+        // TODO remove private int highestDKPsinceLastLoot = 0;
         public Label lblPluginStatus;
 
         /// <summary>Settings serializer, for storing plugin settings.</summary>
@@ -844,8 +843,6 @@ namespace act_plugin_dkp
         /// <summary>Regular Expression for chat text - German.</summary>
         private Regex regexChatGer = new Regex(logTimeStampRegexStr + @"(?:(?<speaker>" + germanYou + @")|\\aPC -?\d+ (?<speaker>\w+):\w+\\.a) (?<channel>.+?), ?""(?<text>.+)""", RegexOptions.Compiled);
 
-        private Regex regexBid = new Regex(@"[^\d]*(?<bid>[\d,.]+)(?<platbid>[kK]+)?[^\d]*", RegexOptions.Compiled);
-
         public void InitPlugin(TabPage pluginScreenSpace, Label pluginStatusText)
         {
             this.lblPluginStatus = pluginStatusText;
@@ -862,10 +859,11 @@ namespace act_plugin_dkp
         /// </summary>
         private void LoadSettings()
         {
-            this.xmlSettings.AddControlSetting(this.chatLinesCheckBox.Name, this.chatLinesCheckBox);
-            this.xmlSettings.AddControlSetting(this.chatSecondsCheckBox.Name, this.chatSecondsCheckBox);
-            this.xmlSettings.AddControlSetting(this.numberOfChatLinesSelector.Name, this.numberOfChatLinesSelector);
-            this.xmlSettings.AddControlSetting(this.numberOfChatSecondsSelector.Name, this.numberOfChatSecondsSelector);
+            // TODO remove or restore; for now settings are fixed
+            // this.xmlSettings.AddControlSetting(this.chatLinesCheckBox.Name, this.chatLinesCheckBox);
+            // this.xmlSettings.AddControlSetting(this.chatSecondsCheckBox.Name, this.chatSecondsCheckBox);
+            // this.xmlSettings.AddControlSetting(this.numberOfChatLinesSelector.Name, this.numberOfChatLinesSelector);
+            // this.xmlSettings.AddControlSetting(this.numberOfChatSecondsSelector.Name, this.numberOfChatSecondsSelector);
             this.xmlSettings.AddControlSetting(this.lbNamedChat.Name, this.lbNamedChat);
             this.xmlSettings.AddControlSetting(this.ChatPanel.Name, this.ChatPanel);
             this.xmlSettings.AddControlSetting(this.EnglishRadioButton.Name, this.EnglishRadioButton);
@@ -942,38 +940,6 @@ namespace act_plugin_dkp
             }
         }
 
-        void guessDKP(string chatline)
-        {
-            var multiplier = 1;
-            var match = this.regexBid.Match(chatline);
-            if (!match.Success) {
-                return;
-            }
-            this.dkpDebugText.Text += "new bid: " + chatline + Environment.NewLine;
-            if (match.Groups["platbid"].Success) {
-                if (match.Groups["platbid"].Value.Trim().ToLower() == "k") {
-                    multiplier = 1000;
-                } else if (match.Groups["platbid"].Value.Trim().ToLower() == "kk") {
-                    multiplier = 1000000;
-                }
-            }
-            string sdkp = match.Groups["bid"].Value.Trim().ToLower().Replace(",", ".");
-            float fdkpraw = float.Parse(sdkp);
-            float fdkp = fdkpraw * multiplier;
-            if (fdkp >= 20000.0) {
-                // non-dkp bid
-                return;
-            } else if (fdkp < 20.0) {
-                // probably missing multiplier
-                fdkp = fdkp * 1000;
-            }
-            int dkp = (int) fdkp;
-            if (dkp > this.highestDKPsinceLastLoot) {
-                this.highestDKPsinceLastLoot = dkp;
-                this.dkpDebugText.Text += "highest bid: " + this.highestDKPsinceLastLoot + Environment.NewLine;
-            }
-        }
-
         void oFormActMain_OnLogLineRead(bool isImport, LogLineEventArgs logInfo)
         {
             if (this.regexZone.IsMatch(logInfo.logLine))
@@ -1004,8 +970,9 @@ namespace act_plugin_dkp
                         {
                             this.chatCollections.Add(s.ToUpper(), new List<ChatLine>());
                         }
-                        this.chatCollections[s.ToUpper()].Add(new ChatLine(logInfo.detectedTime, logInfo.logLine, channel, speaker, text));
-                        this.guessDKP(text);
+                        var chatline = new ChatLine(logInfo.detectedTime, logInfo.logLine, channel, speaker, text);
+                        this.chatCollections[s.ToUpper()].Add(chatline);
+                        // TODO remove this.guessDKP(text);
                         break;
                     }
                 }
@@ -1080,8 +1047,9 @@ namespace act_plugin_dkp
                         item.Chat.RemoveAt(i);
                     }
                 }
-                item.DKP = this.highestDKPsinceLastLoot.ToString();
-                this.highestDKPsinceLastLoot = 0;
+                item.guessDKP();
+                // TODO remove item.DKP = this.highestDKPsinceLastLoot.ToString();
+                // TODO remove this.highestDKPsinceLastLoot = 0;
                 this.lootedItems.Add(item);
                 this.refreshLvItems = true;
             }
@@ -1427,6 +1395,8 @@ namespace act_plugin_dkp
 
         internal class LootedItemData
         {
+            private static Regex regexBid = new Regex(@"[^\d]*(?<bid>[\d,.]+)(?<platbid>[kK]+)?[^\d]*", RegexOptions.Compiled);
+
             public string Player { get; set; }
 
             public string ItemName { get; set; }
@@ -1464,6 +1434,63 @@ namespace act_plugin_dkp
                 this.ItemLink = regexItem.Match(LogLine).Value;
                 this.DKP = "0";
                 this.DKPSubmitResult = "-";
+            }
+            
+            public void guessDKP()
+            {
+                var auctionstart = new DateTime(0);
+                // find earliest occurence of item name in the chat
+                foreach (var chatline in this.Chat) {
+                    if (!chatline.Text.Contains(this.ItemName))
+                        continue;
+                    if (chatline.Time > auctionstart) {
+                        auctionstart = chatline.Time;
+                    }
+                }
+                string bidtext = null;
+                var latestbid = new DateTime(0);
+                // find lastest bid from looter
+                foreach (var chatline in this.Chat) {
+                    if (chatline.Time < auctionstart)
+                        continue;
+                    if (chatline.Player != this.Player)
+                        continue;
+                    if (latestbid == null || chatline.Time > latestbid) {
+                        latestbid = chatline.Time;
+                        bidtext = chatline.Text;
+                    }
+                }
+                if (bidtext == null)
+                    return;
+                var multiplier = 1;
+                var match = LootedItemData.regexBid.Match(bidtext);
+                if (!match.Success) {
+                    return;
+                }
+                // this.dkpDebugText.Text += "new bid: " + bidtext + Environment.NewLine;
+                if (match.Groups["platbid"].Success) {
+                    if (match.Groups["platbid"].Value.Trim().ToLower() == "k") {
+                        multiplier = 1000;
+                    } else if (match.Groups["platbid"].Value.Trim().ToLower() == "kk") {
+                        multiplier = 1000000;
+                    }
+                }
+                string sdkp = match.Groups["bid"].Value.Trim().ToLower().Replace(",", ".");
+                float fdkpraw = float.Parse(sdkp);
+                float fdkp = fdkpraw * multiplier;
+                if (fdkp >= 20000.0) {
+                    // non-dkp bid
+                    return;
+                } else if (fdkp < 20.0) {
+                    // probably missing multiplier
+                    fdkp = fdkp * 1000;
+                }
+                int dkp = (int) fdkp;
+                // if (dkp > this.highestDKPsinceLastLoot) {
+                    // this.highestDKPsinceLastLoot = dkp;
+                    // this.dkpDebugText.Text += "highest bid: " + this.highestDKPsinceLastLoot + Environment.NewLine;
+                // }
+                this.DKP = dkp.ToString();
             }
 
             public class Sorter : IComparer<LootedItemData>
