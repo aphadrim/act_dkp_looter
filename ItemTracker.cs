@@ -25,7 +25,6 @@ namespace act_plugin_dkp
     public class AphaLootTracker : UserControl, IActPluginV1
     {
         private HttpClient httpClient;
-        bool cookiesInitialized = false;
         private bool refreshLvItems = false;
         private int lvChatSorting = 0;
         private bool lvChatReverse = true;
@@ -414,7 +413,7 @@ namespace act_plugin_dkp
             this.otherSettingsGroupBox.Controls.Add(this.dkpDebugText);
             this.otherSettingsGroupBox.Location = new System.Drawing.Point(7, 375);
             this.otherSettingsGroupBox.Name = "otherSettingsGroupBox";
-            this.otherSettingsGroupBox.Size = new System.Drawing.Size(704, 300);
+            this.otherSettingsGroupBox.Size = new System.Drawing.Size(817, 400);
             this.otherSettingsGroupBox.TabIndex = 4;
             this.otherSettingsGroupBox.TabStop = false;
             this.otherSettingsGroupBox.Text = "Other Settings";
@@ -478,7 +477,7 @@ namespace act_plugin_dkp
             // 
             this.dkpDebugText.Location = new System.Drawing.Point(7, 140);
             this.dkpDebugText.Name = "dkpDebugText";
-            this.dkpDebugText.Size = new System.Drawing.Size(400, 150);
+            this.dkpDebugText.Size = new System.Drawing.Size(800, 250);
             this.dkpDebugText.TabIndex = 2;
             this.dkpDebugText.Text = "";
             this.dkpDebugText.Multiline = true;
@@ -1172,48 +1171,61 @@ namespace act_plugin_dkp
         {
             if (this.dkpSiteURL.Text == "")
                 throw new System.ArgumentException("Missing URL for DKP Website", "empty URL");
-            if (!this.cookiesInitialized) {
-                if (this.dkpSiteUser.Text == "")
-                    throw new System.ArgumentException("Missing username for DKP Website", "empty username");
-                if (this.dkpSitePwd.Text == "")
-                    throw new System.ArgumentException("Missing password for DKP Website", "empty password");
-                if (this.httpClient != null)
-                    this.httpClient.Dispose();
-                this.httpClient = new HttpClient();
-                var websiteURI = new Uri(this.dkpSiteURL.Text);
-                var baseUri = new Uri(websiteURI.GetLeftPart(System.UriPartial.Authority));
-                this.httpClient.BaseAddress = baseUri;
-                var login_values = new Dictionary<string, string> {
-                    { "username", this.dkpSiteUser.Text },
-                    { "password", this.dkpSitePwd.Text },
-                    { "formular", "0" },
-                    { "formular2", "0" },
-                    { "formular_eb", "0" },
-                    { "formular_rz", "0" },
-                    { "formular_auth", "1" },
-                    { "formular_boss", "0" },
-                    { "formular_dkp", "0" },
-                    { "formular_loot", "0" },
-                    { "formular_progr", "0" },
-                    { "login", "Anmelden" }
-                    };
-                var login_content = new FormUrlEncodedContent(login_values);
-                var login_response = this.httpClient.PostAsync(this.dkpSiteURL.Text, login_content);
-                login_response.Wait();
-                var login_code = (int) login_response.Result.StatusCode;
-                var login_result_str = login_code + " " + login_response.Result.StatusCode.ToString() + " (" + login_response.Result.ReasonPhrase + ")";
-                this.dkpDebugText.Text += "Login result: " + login_result_str + Environment.NewLine;
-                // TODO not sure if there is session timeout, so lets login each time for now
-                //this.cookiesInitialized = true;
+            if (this.dkpSiteUser.Text == "")
+                throw new System.ArgumentException("Missing username for DKP Website", "empty username");
+            if (this.dkpSitePwd.Text == "")
+                throw new System.ArgumentException("Missing password for DKP Website", "empty password");
+            if (this.httpClient != null)
+                this.httpClient.Dispose();
+            // TODO not sure if there is session timeout, so lets login each time for now
+            this.httpClient = new HttpClient();
+            var websiteURI = new Uri(this.dkpSiteURL.Text);
+            var baseUri = new Uri(websiteURI.GetLeftPart(System.UriPartial.Authority));
+            this.httpClient.BaseAddress = baseUri;
+            var login_values = new Dictionary<string, string> {
+                { "username", this.dkpSiteUser.Text },
+                { "password", this.dkpSitePwd.Text },
+                { "formular", "0" },
+                { "formular2", "0" },
+                { "formular_eb", "0" },
+                { "formular_rz", "0" },
+                { "formular_auth", "1" },
+                { "formular_boss", "0" },
+                { "formular_dkp", "0" },
+                { "formular_loot", "0" },
+                { "formular_progr", "0" },
+                { "login", "Anmelden" }
+                };
+            var login_content = new FormUrlEncodedContent(login_values);
+            var login_response = this.httpClient.PostAsync(this.dkpSiteURL.Text, login_content);
+            login_response.Wait();
+            var login_code = (int) login_response.Result.StatusCode;
+            var login_result_str = login_code + " " + login_response.Result.StatusCode.ToString() + " (" + login_response.Result.ReasonPhrase + ")";
+            this.dkpDebugText.Text += "Login result: " + login_result_str + Environment.NewLine;
+            if (login_code != 200) {
+                return;
+            }
+            var login_response_content = login_response.Result.Content.ReadAsStringAsync();
+            login_response_content.Wait();
+            if (!login_response_content.Result.Contains("Loot/DKP-Eintragen")) {
+                this.dkpDebugText.Text += "Submit failed: DKP site not loaded" + Environment.NewLine;
+                return;
             }
             List<DataGridViewRow> selectedDataGridRows = GetSelectedItemRows();
             foreach (DataGridViewRow row in selectedDataGridRows)
             {
                 LootedItemData item = (LootedItemData) row.Tag;
-                byte[] encodedBytes = System.Text.ASCIIEncoding.ASCII.GetBytes(item.ItemLink);
+                if (login_response_content != null && !login_response_content.Result.Contains(item.Player)) {
+                    this.dkpDebugText.Text += "Submit failed: Playere not found in DKP site: " + item.Player + Environment.NewLine;
+                    return;
+                }
+                Regex rgx = new Regex("[^a-zA-Z0-9 ]");
+                var alpha_item_name = rgx.Replace(item.ItemName, "_");
+                var alpha_item_link = item.ItemLink.Replace(item.ItemName, alpha_item_name);
+                byte[] encodedBytes = System.Text.ASCIIEncoding.ASCII.GetBytes(alpha_item_link);
                 var ItemNameBase64 = Convert.ToBase64String(encodedBytes);
                 var loot_values = new Dictionary<string, string> {
-                    { "dkp_loot_name", item.ItemLink },
+                    { "dkp_loot_name", alpha_item_link },
                     { "dkp_loot_name_base64", ItemNameBase64 },
                     { "name_user_loot", item.Player },
                     { "dkp_loot_wert", item.DKP },
@@ -1233,7 +1245,7 @@ namespace act_plugin_dkp
                 loot_response.Wait();
                 var loot_code = (int) loot_response.Result.StatusCode;
                 var loot_result_str = loot_code + " " + loot_response.Result.StatusCode.ToString() + " (" + loot_response.Result.ReasonPhrase + ")";
-                this.dkpDebugText.Text += "Loot submit result for [" + item.ItemName + "]: " + loot_result_str + Environment.NewLine;
+                this.dkpDebugText.Text += "Loot submit result for [" + alpha_item_link + "]: " + loot_result_str + Environment.NewLine;
                 item.DKPSubmitResult = loot_response.Result.ReasonPhrase + " at " + DateTime.Now;
             }
             this.RepopulateItemDataGridview();
@@ -1392,7 +1404,7 @@ namespace act_plugin_dkp
 
         internal class LootedItemData
         {
-            private static Regex regexBid = new Regex(@"[^\d]*(?<bid>[\d,.]+)(?<platbid>[kK]+)?[^\d]*", RegexOptions.Compiled);
+            private static Regex regexBid = new Regex(@"[^\d]*(?<int_bid>\d+)(?:[,.](?<frac_bid>\d+))?(?<is_plat_bid>[kK]+)?[^\d]*", RegexOptions.Compiled);
 
             public string Player { get; set; }
 
@@ -1464,22 +1476,32 @@ namespace act_plugin_dkp
                 if (!match.Success) {
                     return;
                 }
-                if (match.Groups["platbid"].Success) {
-                    if (match.Groups["platbid"].Value.Trim().ToLower() == "k") {
+                if (match.Groups["is_plat_bid"].Success) {
+                    if (match.Groups["is_plat_bid"].Value.Trim().ToLower() == "k") {
                         multiplier = 1000;
-                    } else if (match.Groups["platbid"].Value.Trim().ToLower() == "kk") {
+                    } else if (match.Groups["is_plat_bid"].Value.Trim().ToLower() == "kk") {
                         multiplier = 1000000;
+                    } else {
+                        return;
                     }
                 }
-                string sdkp = match.Groups["bid"].Value.Trim().ToLower().Replace(",", ".");
-                float fdkpraw = float.Parse(sdkp);
-                float fdkp = fdkpraw * multiplier;
+                int int_bid = int.Parse(match.Groups["int_bid"].Value);
+                int frac_bid = 0;
+                int divisor = 1;
+                if (match.Groups["frac_bid"].Success) {
+                    string sfrac_bid = match.Groups["frac_bid"].Value;
+                    for (int i = 0; i < sfrac_bid.Length; i++) {
+                        divisor *= 10;
+                    }
+                    frac_bid = int.Parse(sfrac_bid);
+                }
+                double fdkp = ((double) int_bid + (double) frac_bid / (double) divisor) * (double) multiplier;
                 if (fdkp >= 20000.0) {
-                    // non-dkp bid
+                    // must be non-dkp bid with missing plat postfix
                     return;
                 } else if (fdkp < 20.0) {
                     // probably missing multiplier
-                    fdkp = fdkp * 1000;
+                    fdkp = fdkp * 1000.0;
                 }
                 int dkp = (int) fdkp;
                 this.DKP = dkp.ToString();
